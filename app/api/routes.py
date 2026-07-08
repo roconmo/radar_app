@@ -1,12 +1,13 @@
 from fastapi import APIRouter, HTTPException
-from app.models.schemas import RawArticle, ProcessResponse
+from app.models.schemas import ProcessRequest, ProcessResponse
 from app.services import normalizer, deduplicator, history, insights
 
 router = APIRouter()
 
 
 @router.post("/process", response_model=ProcessResponse)
-def process_articles(raw_articles: list[RawArticle]):
+def process_articles(request: ProcessRequest):
+    raw_articles = request.articles
     if not raw_articles:
         raise HTTPException(status_code=400, detail="No se recibieron artículos")
 

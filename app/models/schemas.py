@@ -42,6 +42,10 @@ class LaguardiaAnalysis(BaseModel):
     temas_clave: str
 
 
+class ProcessRequest(BaseModel):
+    articles: list[RawArticle]
+
+
 class ProcessResponse(BaseModel):
     articles_received: int
     articles_after_dedup: int
