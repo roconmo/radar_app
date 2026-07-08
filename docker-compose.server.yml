@@ -1,0 +1,47 @@
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    restart: always
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - N8N_RUNNERS_ENABLED=true
+      - NODE_ENV=production
+      - N8N_SECURE_COOKIE=false
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
+      - TZ=${GENERIC_TIMEZONE}
+      - N8N_EDITOR_BASE_URL=http://n8n.rosaliacontrerasmoreira.com:5678
+      - WEBHOOK_URL=http://n8n.rosaliacontrerasmoreira.com:5678
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./local-files:/files
+
+  radar-api:
+    build: ./radar_app
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - CLAUDE_MODEL=claude-sonnet-4-6
+      - SIMILARITY_THRESHOLD=0.85
+      - HISTORY_DB_PATH=data/history.db
+    volumes:
+      - radar_data:/app/data
+
+  radar-dashboard:
+    build: ./radar_app/dashboard
+    restart: always
+    ports:
+      - "8501:8501"
+    environment:
+      - HISTORY_DB_PATH=data/history.db
+    volumes:
+      - radar_data:/app/data   # mismo volumen que la API → misma BD
+
+volumes:
+  n8n_data:
+  radar_data:
