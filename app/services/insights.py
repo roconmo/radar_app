@@ -54,12 +54,18 @@ def _strip_fence(raw: str) -> str:
     return raw.strip()
 
 
+MAX_ARTICLES = 80  # evita respuestas truncadas por límite de tokens
+
+
 def generate_insights(
     articles: list[NormalizedArticle],
 ) -> tuple[LaguardiaAnalysis | None, str, list[Insight]]:
     """Devuelve (analysis, raw_news_blob, insights)."""
     if not articles:
         return None, "", []
+
+    # Limitar para evitar que la respuesta de Claude se corte
+    articles = articles[:MAX_ARTICLES]
 
     news_block = "\n\n".join(
         f"[{a.source}] {a.title}\n{a.url}"
@@ -68,7 +74,7 @@ def generate_insights(
 
     response = client.messages.create(
         model=settings.claude_model,
-        max_tokens=4096,
+        max_tokens=8192,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": USER_PROMPT_TEMPLATE.format(news_block=news_block)}],
     )
