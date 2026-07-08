@@ -15,18 +15,20 @@ def process_articles(raw_articles: list[RawArticle]):
     checked = history.mark_new_articles(deduped)
 
     new_only = [a for a in checked if a.is_new]
-    generated = insights.generate_insights(new_only)
+    analysis, raw_blob, insight_list = insights.generate_insights(new_only)
 
     history.save_run(
         articles_received=len(raw_articles),
         articles_after_dedup=len(deduped),
         new_articles=new_only,
-        insights=generated,
+        insights=insight_list,
     )
 
     return ProcessResponse(
         articles_received=len(raw_articles),
         articles_after_dedup=len(deduped),
         new_articles=len(new_only),
-        insights=generated,
+        analysis=analysis,
+        raw_news_blob=raw_blob,
+        insights=insight_list,
     )

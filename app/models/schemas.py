@@ -4,7 +4,6 @@ from datetime import datetime
 
 
 class RawArticle(BaseModel):
-    """Lo que llega desde n8n (raw, sin normalizar)."""
     title: str
     url: str
     source: str
@@ -14,26 +13,39 @@ class RawArticle(BaseModel):
 
 
 class NormalizedArticle(BaseModel):
-    """Artículo tras normalización y deduplicación."""
     title: str
     url: str
     source: str
     published_at: Optional[datetime] = None
     content: str
-    is_new: bool = True  # False si ya estaba en histórico
+    is_new: bool = True
 
 
 class Insight(BaseModel):
+    """Para el dashboard Streamlit (histórico visual)."""
     title: str
     summary: str
-    relevance: str        # alta / media / baja
+    relevance: str  # alta / media / baja
     sources: list[str]
     tags: list[str]
 
 
+class LaguardiaAnalysis(BaseModel):
+    """Schema de salida hacia Google Sheets (mismo formato que el workflow original)."""
+    senales_relevantes: str
+    early_signals: str
+    market_shifts: str
+    implicaciones: str
+    oportunidades: str
+    riesgos: str
+    marcas_mencionadas: str
+    temas_clave: str
+
+
 class ProcessResponse(BaseModel):
-    """Respuesta que devuelve la API a n8n."""
     articles_received: int
     articles_after_dedup: int
     new_articles: int
-    insights: list[Insight]
+    analysis: Optional[LaguardiaAnalysis] = None
+    raw_news_blob: str = ""
+    insights: list[Insight] = []
