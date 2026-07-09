@@ -40,6 +40,7 @@ class LaguardiaAnalysis(BaseModel):
     riesgos: str
     marcas_mencionadas: str
     temas_clave: str
+    recomendacion_dia: str
 
 
 class ProcessRequest(BaseModel):

@@ -5,13 +5,21 @@ from app.models.schemas import RawArticle, NormalizedArticle
 
 
 def normalize(articles: list[RawArticle]) -> list[NormalizedArticle]:
-    return [_normalize_one(a) for a in articles]
+    result = []
+    for a in articles:
+        n = _normalize_one(a)
+        if n is not None:
+            result.append(n)
+    return result
 
 
-def _normalize_one(article: RawArticle) -> NormalizedArticle:
+def _normalize_one(article: RawArticle) -> NormalizedArticle | None:
+    url = article.url.strip()
+    if not url.startswith("http"):
+        return None  # descarta URLs relativas (sin dominio base)
     return NormalizedArticle(
         title=_clean_text(article.title),
-        url=article.url.strip(),
+        url=url,
         source=article.source.strip(),
         published_at=_parse_date(article.published_at),
         content=_clean_text(article.content or article.summary or ""),

@@ -31,7 +31,8 @@ Devuelve un JSON con esta estructura exacta (sin markdown, JSON puro):
     "oportunidades": "oportunidades concretas que puede aprovechar Laguardia-Moreira",
     "riesgos": "riesgos y amenazas a vigilar",
     "marcas_mencionadas": "lista separada por comas de todas las marcas mencionadas en las noticias",
-    "temas_clave": "lista separada por comas de los temas principales detectados"
+    "temas_clave": "lista separada por comas de los temas principales detectados",
+    "recomendacion_dia": "UNA acción concreta y específica que el equipo comercial de Laguardia-Moreira debería hacer hoy basándose en las noticias analizadas"
   }},
   "insights": [
     {{
