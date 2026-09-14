@@ -57,18 +57,33 @@ def _create_tables(conn: sqlite3.Connection):
 
 def mark_new_articles(articles: list[NormalizedArticle]) -> list[NormalizedArticle]:
     conn = _get_conn()
+    _cleanup_old_urls(conn)
     result = []
     for article in articles:
-        row = conn.execute("SELECT url FROM seen_urls WHERE url = ?", (article.url,)).fetchone()
+        row = conn.execute(
+            "SELECT url FROM seen_urls WHERE url = ? AND seen_at > datetime('now', ? || ' days')",
+            (article.url, f"-{settings.url_retention_days}"),
+        ).fetchone()
         if row:
             article.is_new = False
         else:
-            conn.execute("INSERT INTO seen_urls (url) VALUES (?)", (article.url,))
+            conn.execute(
+                "INSERT OR REPLACE INTO seen_urls (url, seen_at) VALUES (?, CURRENT_TIMESTAMP)",
+                (article.url,),
+            )
             article.is_new = True
         result.append(article)
     conn.commit()
     conn.close()
     return result
+
+
+def _cleanup_old_urls(conn: sqlite3.Connection):
+    conn.execute(
+        "DELETE FROM seen_urls WHERE seen_at < datetime('now', ? || ' days')",
+        (f"-{settings.url_retention_days}",),
+    )
+    conn.commit()
 
 
 def save_run(
