@@ -271,16 +271,39 @@ noticias = pd.DataFrame([
 # ── Barra lateral ─────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("### Radar Moreira")
-    periodo = st.segmented_control("Periodo de análisis", ["30 días", "90 días", "Todo"], default="90 días") or "90 días"
-    st.caption("Afecta a las pestañas de Competencia, Tendencias y Fuentes.")
-    st.divider()
     if st.button("Actualizar datos", width="stretch"):
         st.cache_data.clear()
         st.rerun()
     st.caption("Fuente: Google Sheets «Informe periódico». Los datos se refrescan solos cada 30 minutos.")
 
+st.markdown(f"""
+<div class="hero">
+  <div><div class="hero-kicker">Inteligencia de mercado · Laguardia-Moreira</div>
+  <div class="hero-title">Radar Moreira</div></div>
+  <div class="hero-meta">Último informe<br><b>{esc(fecha_larga(rep['fecha'].max()).capitalize())}</b><br>{len(rep)} informes desde el {esc(fecha_corta(rep['fecha'].min()))}</div>
+</div>
+""", unsafe_allow_html=True)
+
+PERIODOS = {"7 días": 7, "30 días": 30, "Todo": None}
+st.session_state.setdefault("periodo_previo", "30 días")
+
+
+def mantener_periodo():
+    # Volver a pulsar la opción activa la desmarcaría: se restaura la anterior
+    if st.session_state.periodo is None:
+        st.session_state.periodo = st.session_state.periodo_previo
+    st.session_state.periodo_previo = st.session_state.periodo
+
+
+col_lbl, col_sel = st.columns([3, 2], vertical_alignment="center")
+with col_sel:
+    periodo = st.segmented_control("Periodo de análisis", list(PERIODOS), default="30 días", key="periodo",
+                                   on_change=mantener_periodo, label_visibility="collapsed", width="stretch")
+with col_lbl:
+    st.markdown(f"<div class='section-title' style='margin:0'>Periodo de análisis: {esc(periodo.lower())}</div>", unsafe_allow_html=True)
+
 ultimo = rep["fecha"].max()
-dias = {"30 días": 30, "90 días": 90, "Todo": None}[periodo]
+dias = PERIODOS[periodo]
 ini = ultimo - pd.Timedelta(days=dias - 1) if dias else rep["fecha"].min()
 prev_ini = ini - pd.Timedelta(days=dias) if dias else None
 
@@ -296,15 +319,7 @@ def en_previo(df):
 hay_previo = len(en_previo(rep)) > 0
 
 
-# ── Cabecera y KPIs ───────────────────────────────────────────────────────────
-st.markdown(f"""
-<div class="hero">
-  <div><div class="hero-kicker">Inteligencia de mercado · Laguardia-Moreira</div>
-  <div class="hero-title">Radar Moreira</div></div>
-  <div class="hero-meta">Último informe<br><b>{esc(fecha_larga(ultimo).capitalize())}</b><br>{len(rep)} informes desde el {esc(fecha_corta(rep['fecha'].min()))}</div>
-</div>
-""", unsafe_allow_html=True)
-
+# ── KPIs ──────────────────────────────────────────────────────────────────────
 last = rep.iloc[-1]
 prev = rep.iloc[-2] if len(rep) > 1 else None
 comp_last = comp[comp["fecha"] == last.fecha]
