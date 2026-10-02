@@ -43,6 +43,14 @@ class LaguardiaAnalysis(BaseModel):
     recomendacion_dia: str
 
 
+class ArticleOut(BaseModel):
+    title: str
+    url: str
+    source: str
+    published_at: Optional[str] = None
+    analizada: bool  # False si quedó fuera del límite de artículos enviados a Claude
+
+
 class ProcessRequest(BaseModel):
     articles: list[RawArticle]
 
@@ -54,3 +62,4 @@ class ProcessResponse(BaseModel):
     analysis: Optional[LaguardiaAnalysis] = None
     raw_news_blob: str = ""
     insights: list[Insight] = []
+    new_articles_list: list[ArticleOut] = []

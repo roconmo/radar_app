@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from app.models.schemas import ProcessRequest, ProcessResponse
+from app.models.schemas import ArticleOut, ProcessRequest, ProcessResponse
 from app.services import normalizer, deduplicator, history, insights
 
 router = APIRouter()
@@ -32,4 +32,14 @@ def process_articles(request: ProcessRequest):
         analysis=analysis,
         raw_news_blob=raw_blob,
         insights=insight_list,
+        new_articles_list=[
+            ArticleOut(
+                title=a.title,
+                url=a.url,
+                source=a.source,
+                published_at=a.published_at.isoformat() if a.published_at else None,
+                analizada=i < insights.MAX_ARTICLES,
+            )
+            for i, a in enumerate(new_only)
+        ],
     )
