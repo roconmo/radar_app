@@ -20,7 +20,7 @@ PALETTE = [C["blue"], C["purple"], C["orange"], C["green"], C["cyan"], C["pink"]
 
 # Roca y Santos son palabras comunes: se buscan con mayúscula o como nombre de fuente
 COMPETIDORES = {
-    "Roca": re.compile(r"\bRoca\b|\[roca\]"),
+    "Roca": re.compile(r"\bRoca\b(?!\s+Rey)|\[roca\]"),
     "Porcelanosa": re.compile(r"porcelanosa", re.I),
     "Cosentino": re.compile(r"cosentino|silestone|dekton", re.I),
     "Grohe": re.compile(r"\bgrohe\b", re.I),
@@ -110,6 +110,8 @@ html, body, .stMarkdown, .stText, button, input { font-family: 'Inter', sans-ser
 .comp-name { font-weight:700; font-size:14px; } .comp-date { color:#8a93ad; font-size:12px; float:right; }
 .comp-news { font-size:13px; margin-top:4px; line-height:1.45; } .comp-news a { color:#c9d1e6; text-decoration:none; } .comp-news a:hover { color:#4a9eff; }
 .snippet { color:#c9d1e6; font-size:13px; line-height:1.6; margin:6px 0; }
+.ficha-titulo { font-size:28px; font-weight:800; letter-spacing:-.6px; margin:4px 0 12px;
+  background: linear-gradient(90deg,#ffffff,#d0a0ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
 mark { background: rgba(255,184,108,.35); color: inherit; padding:0 2px; border-radius:3px; }
 .stTabs [data-baseweb="tab-list"] { gap: 6px; }
 .stTabs [data-baseweb="tab"] { font-weight:600; padding: 8px 14px; }
@@ -140,7 +142,9 @@ def split_blob(blob: str) -> list[dict]:
     items = []
     for fuente, resto in ITEM_RX.findall(blob):
         url = URL_RX.search(resto)
-        titular = URL_RX.sub("", resto).strip(" |—–-\n\t")
+        # Tras el titular, el blob añade " | url", " | Fuente: ... | Imagen:" o un número de página
+        titular = URL_RX.sub("", resto).split(" | ")[0]
+        titular = re.sub(r"(\s*\|\s*)?\s+\d{1,2}\.?$", "", titular).strip(" |—–-\n\t")
         if titular:
             items.append({"fuente": fuente, "titular": titular, "url": url.group(0) if url else ""})
     return items
@@ -303,6 +307,96 @@ noticias = pd.DataFrame([
     {"fecha": r.fecha, **it} for r in rep.itertuples() for it in r.noticias
 ], columns=["fecha", "fuente", "titular", "url"])
 
+
+# ── Ficha de marca ────────────────────────────────────────────────────────────
+CAMPOS_ANALISIS = {"recomendacion_dia": "Recomendación", "senales_relevantes": "Señales", "early_signals": "Early signals",
+                   "market_shifts": "Market shifts", "implicaciones": "Implicaciones", "oportunidades": "Oportunidad",
+                   "riesgos": "Riesgo"}
+# Claude nombra a los competidores incluso para decir que no hay novedades: esas frases no aportan a la ficha
+FRASE_VACIA = re.compile(r"no se detecta|no hay movimientos|ningún competidor|ninguno de los competidores|"
+                         r"sin noticias|no se mencionan|no aparece|ausencia de", re.I)
+FRASE_RX = re.compile(r"(?<=[.!?])\s+(?=[A-ZÁÉÍÓÚÑ¿¡«\"(0-9])")
+
+
+def marca_rx(marca: str) -> re.Pattern:
+    for nombre, rx in COMPETIDORES.items():
+        if nombre.lower() == marca.lower():
+            return rx
+    return re.compile(r"(?<!\w)" + re.escape(marca) + r"(?!\w)", re.I)
+
+
+def resaltar(texto: str, rx: re.Pattern) -> str:
+    out, pos = [], 0
+    for m in rx.finditer(texto):
+        out += [esc(texto[pos:m.start()]), f"<mark>{esc(m.group(0))}</mark>"]
+        pos = m.end()
+    return "".join(out) + esc(texto[pos:])
+
+
+def ficha_marca(marca: str):
+    rx = marca_rx(marca)
+    en_lista = rep["marcas"].apply(lambda l: marca in l)
+    tits = noticias[noticias.apply(lambda r: bool(rx.search(f"[{r.fuente}] {r.titular}")), axis=1)] if len(noticias) else noticias
+    # La misma noticia se cita en varios informes seguidos: se muestra una vez, con su fecha más reciente
+    unicos = tits.iloc[::-1].assign(_k=lambda d: d["titular"].map(sin_acentos)).drop_duplicates("_k")
+    citas = []
+    for r in rep.sort_values("fecha", ascending=False).itertuples():
+        for campo, etiqueta in CAMPOS_ANALISIS.items():
+            texto = getattr(r, campo)
+            partes = lista_items(texto) if campo in ("oportunidades", "riesgos") else FRASE_RX.split(texto)
+            citas += [(r.fecha, etiqueta, p.strip()) for p in partes
+                      if p.strip() and rx.search(p) and not FRASE_VACIA.search(p)]
+    fechas = sorted(set(rep.loc[en_lista, "fecha"]) | set(tits["fecha"]) | {f for f, _, _ in citas})
+
+    st.markdown(f"<div class='ficha-titulo'>{esc(marca)}</div>", unsafe_allow_html=True)
+    if not fechas:
+        st.caption("No hay información sobre esta marca en los informes.")
+        return
+
+    k = st.columns(4)
+    k[0].markdown(kpi("Informes que la citan", len(fechas), f"de {len(rep)} informes"), unsafe_allow_html=True)
+    k[1].markdown(kpi("Titulares", len(unicos), "noticias distintas que la nombran"), unsafe_allow_html=True)
+    k[2].markdown(kpi("Primera vez", fecha_corta(fechas[0]), str(fechas[0].year), small=True), unsafe_allow_html=True)
+    k[3].markdown(kpi("Última vez", fecha_corta(fechas[-1]), str(fechas[-1].year), small=True), unsafe_allow_html=True)
+    st.write("")
+
+    left, right = st.columns([3, 2], gap="large")
+    with left:
+        st.markdown("<div class='section-title'>Titulares que la mencionan</div>", unsafe_allow_html=True)
+        if len(tits):
+            st.markdown("".join(
+                f'<div class="news"><span class="pill">{esc(fecha_corta(t.fecha))}</span><span class="pill">{esc(t.fuente)}</span>'
+                f'{link(t.titular, t.url)}</div>' for t in unicos.head(15).itertuples()), unsafe_allow_html=True)
+        else:
+            st.caption("Ningún titular la nombra; solo aparece en el análisis.")
+
+        st.markdown("<div class='section-title' style='margin-top:18px'>Lo que dice el análisis</div>", unsafe_allow_html=True)
+        def bloque(lista):
+            return "".join(f'<div class="snippet"><span class="pill">{esc(fecha_corta(f))}</span><span class="pill">{esc(e)}</span>'
+                           f'{resaltar(t, rx)}</div>' for f, e, t in lista)
+        if citas:
+            st.markdown(bloque(citas[:8]), unsafe_allow_html=True)
+            if len(citas) > 8:
+                with st.expander(f"Ver {len(citas) - 8} menciones más"):
+                    st.markdown(bloque(citas[8:]), unsafe_allow_html=True)
+        else:
+            st.caption("El análisis no dice nada concreto sobre esta marca.")
+
+    with right:
+        st.markdown("<div class='section-title'>Apariciones por semana</div>", unsafe_allow_html=True)
+        semanas = pd.Series(0, index=sorted(rep["semana"].unique()))
+        cuenta = pd.Series([f.to_period("W-SUN").start_time for f in fechas]).value_counts()
+        semanas.loc[cuenta.index] = cuenta.values
+        fig = go.Figure(go.Bar(x=semanas.index, y=semanas.values, marker_color=C["purple"],
+                               hovertemplate="Semana del %{x|%d/%m}<br>%{y} informes<extra></extra>"))
+        fig.update_yaxes(dtick=1)
+        chart(fig, height=220)
+
+        juntas = Counter(m for l in rep.loc[en_lista, "marcas"] for m in l if m != marca).most_common(10)
+        st.markdown("<div class='section-title'>Suele aparecer junto a</div>", unsafe_allow_html=True)
+        st.markdown("".join(f'<span class="marca">{esc(m)} · {n}</span>' for m, n in juntas) or "—", unsafe_allow_html=True)
+
+
 # ── Barra lateral ─────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("### Radar Moreira")
@@ -382,8 +476,8 @@ k[3].markdown(kpi("Informes", len(en_periodo(rep)),
 k[4].markdown(kpi("Fuentes operativas", f"{operativas}/{len(fuentes)}", inc_html), unsafe_allow_html=True)
 
 st.write("")
-tab_inf, tab_comp, tab_tend, tab_fuen, tab_bus = st.tabs(
-    ["Informe del día", "Competencia", "Tendencias", "Fuentes", "Buscador"])
+tab_inf, tab_comp, tab_marc, tab_tend, tab_fuen, tab_bus = st.tabs(
+    ["Informe del día", "Competencia", "Marcas", "Tendencias", "Fuentes", "Buscador"])
 
 # ── Informe del día ───────────────────────────────────────────────────────────
 with tab_inf:
@@ -422,14 +516,22 @@ with tab_inf:
                 st.caption("Sin datos")
 
     col_m, col_t = st.columns(2)
+    elegida = None
     with col_m:
         st.markdown("<div class='section-title'>Marcas mencionadas</div>", unsafe_allow_html=True)
-        st.markdown("".join(f'<span class="marca">{esc(m)}</span>' for m in row.marcas) or "—",
-                    unsafe_allow_html=True)
+        if row.marcas:
+            elegida = st.pills("Marcas mencionadas", row.marcas, key=f"pills_{sel:%Y%m%d}", label_visibility="collapsed")
+            st.caption("Pulsa una marca para ver su ficha.")
+        else:
+            st.caption("Ninguna marca del sector en este informe.")
     with col_t:
         st.markdown("<div class='section-title'>Temas clave</div>", unsafe_allow_html=True)
         st.markdown("".join(f'<span class="tag">{esc(t.strip())}</span>' for t in row.temas_clave.split(",") if t.strip()) or "—",
                     unsafe_allow_html=True)
+
+    if elegida:
+        with st.container(border=True):
+            ficha_marca(elegida)
 
     if row.noticias:
         st.write("")
@@ -481,6 +583,17 @@ with tab_comp:
                 cards.append((pd.Timestamp.min, f'<div class="comp-card"><div class="comp-name">{esc(nombre)}</div>'
                                                 f'<div class="comp-news" style="color:#8a93ad">{aviso}</div></div>'))
         st.markdown("".join(c for _, c in sorted(cards, key=lambda x: x[0], reverse=True)), unsafe_allow_html=True)
+
+# ── Marcas ────────────────────────────────────────────────────────────────────
+with tab_marc:
+    ranking = marcas["marca"].value_counts()
+    if len(ranking):
+        marca_sel = st.selectbox("Marca", ranking.index, key="marca_tab")
+        st.caption(f"{len(ranking)} marcas del sector citadas desde julio, de más a menos mencionada. "
+                   "Puedes escribir en el desplegable para buscar.")
+        ficha_marca(marca_sel)
+    else:
+        st.caption("Todavía no hay marcas en los informes.")
 
 # ── Tendencias ────────────────────────────────────────────────────────────────
 with tab_tend:
