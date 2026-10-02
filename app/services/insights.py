@@ -1,4 +1,6 @@
 import json
+from datetime import date
+
 import anthropic
 from app.models.schemas import NormalizedArticle, Insight, LaguardiaAnalysis
 from app.core.config import settings
@@ -17,6 +19,8 @@ Responde siempre en JSON válido."""
 
 USER_PROMPT_TEMPLATE = """Analiza las siguientes noticias del sector y genera un informe de inteligencia competitiva para Laguardia-Moreira.
 
+FECHA DE HOY: {fecha}. Úsala como referencia para cualquier plazo o trimestre que menciones.
+
 NOTICIAS:
 {news_block}
 
@@ -30,7 +34,7 @@ Devuelve un JSON con esta estructura exacta (sin markdown, JSON puro):
     "implicaciones": "qué implica todo esto para Laguardia-Moreira específicamente",
     "oportunidades": "oportunidades concretas que puede aprovechar Laguardia-Moreira",
     "riesgos": "riesgos y amenazas a vigilar",
-    "marcas_mencionadas": "lista separada por comas de todas las marcas mencionadas en las noticias",
+    "marcas_mencionadas": "lista separada por comas SOLO de marcas comerciales, fabricantes y distribuidores del sector (baño, cerámica, pavimentos, revestimientos, grifería, sanitarios, mobiliario de baño, superficies, ACS y climatización) que aparezcan en las noticias. NO incluyas ferias, eventos, medios, plataformas web, asociaciones, estudios de arquitectura, personas ni empresas de otros sectores, y no añadas aclaraciones entre paréntesis. Si no hay ninguna, devuelve una cadena vacía",
     "temas_clave": "lista separada por comas de los temas principales detectados",
     "recomendacion_dia": "UNA acción concreta y específica que el equipo comercial de Laguardia-Moreira debería hacer hoy basándose en las noticias analizadas"
   }},
@@ -77,7 +81,8 @@ def generate_insights(
         model=settings.claude_model,
         max_tokens=8192,
         system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": USER_PROMPT_TEMPLATE.format(news_block=news_block)}],
+        messages=[{"role": "user", "content": USER_PROMPT_TEMPLATE.format(
+            news_block=news_block, fecha=date.today().strftime("%d/%m/%Y"))}],
     )
 
     data = json.loads(_strip_fence(response.content[0].text))

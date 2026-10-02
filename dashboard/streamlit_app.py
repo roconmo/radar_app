@@ -47,6 +47,22 @@ TEMAS = {
 }
 TEMAS = {k: re.compile(v, re.I) for k, v in TEMAS.items()}
 
+# Lo que Claude coló como "marca" en informes antiguos: ferias, medios, asociaciones, estudios, personas y otros sectores
+NO_MARCAS = {
+    "cersaie", "cevisama", "tecna", "interihotel mad26", "hotel hábitat", "idéobain", "casa decor", "ecléctica",
+    "interempresas", "el mueble", "habitissimo", "aquí tu reforma", "dezeen", "alimarket",
+    "andimac", "agrubaño", "amec", "tile of spain", "federación hábitat de españa", "anefhop", "agremia", "ascer", "hispalyt",
+    "hermès", "ferrovial", "renault trucks", "telefónica", "vinci energies", "all for one", "in-power", "kone",
+    "vertikal elevadores", "meliá", "sucuri", "gonvarri", "factum foundation", "sanytol", "cif", "nicolás correa",
+    "testa homes", "trilux",
+    "think architecture", "snøhetta", "front", "altherr désile park", "alventosa morell arquitectes", "bureau faceb",
+    "h arquitectes", "lan architecture", "leopold banchini", "neri&hu", "ohlab", "plata arquitectos", "riken yamamoto",
+    "space a.r.t.", "zakarian-navelet", "giacomo moor", "stefan sagmeister", "mesura", "gavin", "dani garcía",
+    "raquel garcía", "roca rey",
+}
+RUIDO_MARCA = re.compile(r"no se mencionan|ninguna marca|no marca|mencionada en las noticias|"
+                         r"\((?:persona|personaje|estudio|arquitect|diseñador|prescriptor|evento)", re.I)
+
 SECCIONES = ["senales_relevantes", "early_signals", "market_shifts", "implicaciones",
              "oportunidades", "riesgos", "marcas_mencionadas", "temas_clave", "recomendacion_dia"]
 
@@ -130,6 +146,25 @@ def split_blob(blob: str) -> list[dict]:
     return items
 
 
+def limpiar_marcas(texto: str) -> list[str]:
+    marcas = []
+    for m in texto.split(","):
+        m = m.strip()
+        base = re.sub(r"\s*\(.*$", "", m).strip()
+        if base and not RUIDO_MARCA.search(m) and base.lower() not in NO_MARCAS:
+            marcas.append(base)
+    return marcas
+
+
+def unificar_mayusculas(listas: pd.Series) -> pd.Series:
+    # GRASS/Grass, NOFER/Nofer...: se muestra la grafía más frecuente
+    grafias = Counter(m for l in listas for m in l)
+    canon = {}
+    for m, _ in grafias.most_common():
+        canon.setdefault(m.lower(), m)
+    return listas.apply(lambda l: list(dict.fromkeys(canon[m.lower()] for m in l)))
+
+
 def prepare_reports(raw: pd.DataFrame) -> pd.DataFrame:
     df = raw.copy()
     for col in SECCIONES + ["raw_news_blob"]:
@@ -140,6 +175,7 @@ def prepare_reports(raw: pd.DataFrame) -> pd.DataFrame:
     df = df.drop_duplicates("fecha", keep="last").reset_index(drop=True)
     df["noticias"] = df["raw_news_blob"].apply(split_blob)
     df["n_noticias"] = df["noticias"].str.len()
+    df["marcas"] = unificar_mayusculas(df["marcas_mencionadas"].apply(limpiar_marcas))
     df["semana"] = df["fecha"].dt.to_period("W-SUN").dt.start_time
     return df
 
@@ -254,15 +290,14 @@ if rep.empty:
 
 comp = pd.DataFrame([
     {"fecha": r.fecha, "semana": r.semana, "competidor": k, "menciones": v}
-    for r in rep.itertuples() for k, v in competitor_hits(r.noticias, r.marcas_mencionadas).items()
+    for r in rep.itertuples() for k, v in competitor_hits(r.noticias, ", ".join(r.marcas)).items()
 ])
 temas = pd.DataFrame([
     {"fecha": r.fecha, "semana": r.semana, "bloque": k, "n": v}
     for r in rep.itertuples() for k, v in tema_buckets(r.temas_clave).items()
 ], columns=["fecha", "semana", "bloque", "n"])
 marcas = pd.DataFrame([
-    {"fecha": r.fecha, "marca": m.strip()}
-    for r in rep.itertuples() for m in r.marcas_mencionadas.split(",") if m.strip()
+    {"fecha": r.fecha, "marca": m} for r in rep.itertuples() for m in r.marcas
 ], columns=["fecha", "marca"])
 noticias = pd.DataFrame([
     {"fecha": r.fecha, **it} for r in rep.itertuples() for it in r.noticias
@@ -389,7 +424,7 @@ with tab_inf:
     col_m, col_t = st.columns(2)
     with col_m:
         st.markdown("<div class='section-title'>Marcas mencionadas</div>", unsafe_allow_html=True)
-        st.markdown("".join(f'<span class="marca">{esc(m.strip())}</span>' for m in row.marcas_mencionadas.split(",") if m.strip()) or "—",
+        st.markdown("".join(f'<span class="marca">{esc(m)}</span>' for m in row.marcas) or "—",
                     unsafe_allow_html=True)
     with col_t:
         st.markdown("<div class='section-title'>Temas clave</div>", unsafe_allow_html=True)
