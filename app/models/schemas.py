@@ -41,6 +41,7 @@ class LaguardiaAnalysis(BaseModel):
     marcas_mencionadas: str
     temas_clave: str
     recomendacion_dia: str
+    post_linkedin: str = ""  # borrador para Marketing, nunca se publica automáticamente
 
 
 class ArticleOut(BaseModel):
