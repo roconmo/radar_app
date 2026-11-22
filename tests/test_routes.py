@@ -28,3 +28,32 @@ def test_process_returns_new_articles_list(tmp_path, monkeypatch):
     assert arts[0]["source"] == "salabano" and arts[0]["published_at"].startswith("2026-10-01")
     assert [a["analizada"] for a in arts] == [True, False]
     assert second["new_articles_list"] == []
+    assert first["empresa"] == "laguardia" and first["analysis_gabriela"] is None
+
+
+def test_process_gabriela_uses_her_report(tmp_path, monkeypatch):
+    from app.models.schemas import GabrielaAnalysis
+    monkeypatch.setattr(settings, "history_db_path", str(tmp_path / "history.db"))
+
+    def no_laguardia(articles):
+        raise AssertionError("no debe usar el informe de Laguardia")
+
+    monkeypatch.setattr(insights, "generate_insights", no_laguardia)
+    monkeypatch.setattr(insights, "generate_gabriela",
+                        lambda articles: (GabrielaAnalysis(resumen="ok"), "blob"))
+    payload = {"empresa": "Gabriela Tassile", "articles": [
+        {"title": "Congreso de Medicina Interna", "url": "https://b.com/1", "source": "mcb_calendario"},
+    ]}
+
+    data = TestClient(app).post("/api/v1/process", json=payload).json()
+
+    assert data["empresa"] == "gabriela_tassile"
+    assert data["analysis"] is None
+    assert data["analysis_gabriela"]["resumen"] == "ok"
+    assert data["raw_news_blob"] == "blob"
+
+
+def test_process_rejects_unknown_company(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "history_db_path", str(tmp_path / "history.db"))
+    payload = {"empresa": "otra", "articles": [{"title": "t", "url": "https://c.com", "source": "s"}]}
+    assert TestClient(app).post("/api/v1/process", json=payload).status_code == 400

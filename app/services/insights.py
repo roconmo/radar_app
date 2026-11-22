@@ -1,8 +1,9 @@
 import json
 from datetime import date
+from pathlib import Path
 
 import anthropic
-from app.models.schemas import NormalizedArticle, Insight, LaguardiaAnalysis
+from app.models.schemas import NormalizedArticle, Insight, LaguardiaAnalysis, GabrielaAnalysis
 from app.core.config import settings
 
 client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
@@ -26,7 +27,6 @@ NOTICIAS:
 
 Devuelve un JSON con esta estructura exacta (sin markdown, JSON puro):
 {{
-  "raw_news_blob": "listado formateado de todas las noticias analizadas con fuente y titular",
   "analysis": {{
     "senales_relevantes": "2-4 párrafos sobre las señales más importantes del sector hoy",
     "early_signals": "tendencias emergentes y señales débiles que pueden crecer",
@@ -89,7 +89,80 @@ def generate_insights(
     data = json.loads(_strip_fence(response.content[0].text))
 
     analysis = LaguardiaAnalysis(**data["analysis"]) if "analysis" in data else None
-    raw_blob = data.get("raw_news_blob", news_block)
+    # La lista de noticias ya la tenemos: no se le pide a Claude que la vuelva a escribir
+    raw_blob = news_block
     insight_list = [Insight(**i) for i in data.get("insights", [])]
 
     return analysis, raw_blob, insight_list
+
+
+# ---------------------------------------------------------------------------
+# Gabriela Tassile (catering para empresas y sector farmacéutico en Madrid)
+# ---------------------------------------------------------------------------
+
+GABRIELA_PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "gabriela_tassile.md"
+GABRIELA_CONTENT_CHARS = 500  # texto de cada noticia que se envía, además del título
+
+GABRIELA_USER_TEMPLATE = """FECHA DE HOY: {fecha}. Úsala para saber si un evento es futuro y si da tiempo a preparar una propuesta.
+
+NOTICIAS Y TEXTOS:
+{news_block}
+
+Devuelve un JSON con esta estructura exacta (sin markdown, JSON puro). Cada campo es texto listo para leer en un correo: frases cortas, un elemento por línea y sin guiones largos.
+{{
+  "resumen": "máximo 120 palabras",
+  "oportunidades_inmediatas": "hasta 5, ordenadas por puntuación. Para cada una: empresa u organizador, oportunidad, evidencia, puntuación sobre 100, fuente con enlace y siguiente paso. Si no hay ninguna verificable, escribe exactamente: Hoy no hay oportunidades inmediatas verificables.",
+  "nuevas_organizaciones": "hasta 5. Para cada una: nombre, tipo, señal que lo justifica con su fuente, canal público de contacto si aparece y por qué podría ser un cliente recurrente. Si no hay ninguna, cadena vacía",
+  "senales_mercado": "hasta 3, cada una con lo que implica para Gabriela. Si ninguna cambia lo que debería hacer, cadena vacía",
+  "accion_semana": "una sola acción, concreta y realizable"
+}}"""
+
+
+def _gabriela_system_prompt() -> str:
+    texto = GABRIELA_PROMPT_PATH.read_text(encoding="utf-8").strip()
+    return texto + "\n\nResponde siempre en JSON válido."
+
+
+def _gabriela_news_block(articles: list[NormalizedArticle]) -> str:
+    bloques = []
+    for a in articles:
+        bloque = f"[{a.source}] {a.title}\n{a.url}"
+        if a.content:
+            bloque += "\n" + a.content[:GABRIELA_CONTENT_CHARS]
+        bloques.append(bloque)
+    return "\n\n".join(bloques)
+
+
+def generate_gabriela(
+    articles: list[NormalizedArticle],
+) -> tuple[GabrielaAnalysis | None, str]:
+    """Devuelve (analysis, raw_news_blob) para el informe de Gabriela Tassile."""
+    if not articles:
+        return None, ""
+
+    articles = articles[:MAX_ARTICLES]
+    news_block = _gabriela_news_block(articles)
+
+    response = client.messages.create(
+        model=settings.claude_model,
+        max_tokens=8192,
+        system=_gabriela_system_prompt(),
+        messages=[{"role": "user", "content": GABRIELA_USER_TEMPLATE.format(
+            news_block=news_block, fecha=date.today().strftime("%d/%m/%Y"))}],
+    )
+
+    data = json.loads(_strip_fence(response.content[0].text))
+    return _to_gabriela_analysis(data), news_block
+
+
+def _to_gabriela_analysis(data: dict) -> GabrielaAnalysis:
+    """Acepta texto o listas en cada campo y lo deja todo como texto para el correo."""
+    campos = {}
+    for campo in GabrielaAnalysis.model_fields:
+        valor = data.get(campo, "")
+        if isinstance(valor, list):
+            valor = "\n".join(
+                json.dumps(v, ensure_ascii=False) if isinstance(v, dict) else str(v) for v in valor
+            )
+        campos[campo] = str(valor or "").strip()
+    return GabrielaAnalysis(**campos)

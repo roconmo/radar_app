@@ -44,6 +44,15 @@ class LaguardiaAnalysis(BaseModel):
     post_linkedin: str = ""  # borrador para Marketing, nunca se publica automáticamente
 
 
+class GabrielaAnalysis(BaseModel):
+    """Informe comercial de Gabriela Tassile (catering). Cada campo es texto listo para el correo."""
+    resumen: str = ""
+    oportunidades_inmediatas: str = ""
+    nuevas_organizaciones: str = ""
+    senales_mercado: str = ""
+    accion_semana: str = ""
+
+
 class ArticleOut(BaseModel):
     title: str
     url: str
@@ -54,13 +63,16 @@ class ArticleOut(BaseModel):
 
 class ProcessRequest(BaseModel):
     articles: list[RawArticle]
+    empresa: str = "laguardia"  # sin este campo, el informe es el de Laguardia-Moreira
 
 
 class ProcessResponse(BaseModel):
+    empresa: str = "laguardia"
     articles_received: int
     articles_after_dedup: int
     new_articles: int
     analysis: Optional[LaguardiaAnalysis] = None
+    analysis_gabriela: Optional[GabrielaAnalysis] = None
     raw_news_blob: str = ""
     insights: list[Insight] = []
     new_articles_list: list[ArticleOut] = []

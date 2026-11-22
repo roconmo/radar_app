@@ -4,9 +4,26 @@ from app.services import normalizer, deduplicator, history, insights
 
 router = APIRouter()
 
+LAGUARDIA = "laguardia"
+GABRIELA = "gabriela_tassile"
+EMPRESAS = {
+    "": LAGUARDIA,
+    "laguardia": LAGUARDIA,
+    "laguardia_moreira": LAGUARDIA,
+    "gabriela_tassile": GABRIELA,
+}
+
+
+def _empresa(valor: str) -> str:
+    clave = valor.strip().lower().replace(" ", "_").replace("-", "_")
+    if clave not in EMPRESAS:
+        raise HTTPException(status_code=400, detail=f"Empresa desconocida: {valor}")
+    return EMPRESAS[clave]
+
 
 @router.post("/process", response_model=ProcessResponse)
 def process_articles(request: ProcessRequest):
+    empresa = _empresa(request.empresa)
     raw_articles = request.articles
     if not raw_articles:
         raise HTTPException(status_code=400, detail="No se recibieron artículos")
@@ -16,7 +33,12 @@ def process_articles(request: ProcessRequest):
     checked = history.mark_new_articles(deduped)
 
     new_only = [a for a in checked if a.is_new]
-    analysis, raw_blob, insight_list = insights.generate_insights(new_only)
+
+    analysis, analysis_gabriela, insight_list = None, None, []
+    if empresa == GABRIELA:
+        analysis_gabriela, raw_blob = insights.generate_gabriela(new_only)
+    else:
+        analysis, raw_blob, insight_list = insights.generate_insights(new_only)
 
     history.save_run(
         articles_received=len(raw_articles),
@@ -26,10 +48,12 @@ def process_articles(request: ProcessRequest):
     )
 
     return ProcessResponse(
+        empresa=empresa,
         articles_received=len(raw_articles),
         articles_after_dedup=len(deduped),
         new_articles=len(new_only),
         analysis=analysis,
+        analysis_gabriela=analysis_gabriela,
         raw_news_blob=raw_blob,
         insights=insight_list,
         new_articles_list=[
