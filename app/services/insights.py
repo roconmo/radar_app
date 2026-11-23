@@ -110,11 +110,11 @@ NOTICIAS Y TEXTOS:
 
 Devuelve un JSON con esta estructura exacta (sin markdown, JSON puro). Cada campo es texto listo para leer en un correo: frases cortas, un elemento por línea y sin guiones largos.
 {{
-  "resumen": "máximo 120 palabras",
-  "oportunidades_inmediatas": "hasta 5, ordenadas por puntuación. Para cada una: empresa u organizador, oportunidad, evidencia, puntuación sobre 100, fuente con enlace y siguiente paso. Si no hay ninguna verificable, escribe exactamente: Hoy no hay oportunidades inmediatas verificables.",
-  "nuevas_organizaciones": "hasta 5. Para cada una: nombre, tipo, señal que lo justifica con su fuente, canal público de contacto si aparece y por qué podría ser un cliente recurrente. Si no hay ninguna, cadena vacía",
-  "senales_mercado": "hasta 3, cada una con lo que implica para Gabriela. Si ninguna cambia lo que debería hacer, cadena vacía",
-  "accion_semana": "una sola acción, concreta y realizable"
+  "resumen": "máximo 120 palabras. Empieza diciendo si hoy hay alguna petición de catering confirmada",
+  "oportunidades_inmediatas": "oportunidades a investigar: hasta 3, ordenadas primero por la facilidad real de contratación y después por puntuación. Para cada una: organizador, evento, fecha y lugar, evidencia, proveedor externo (admitido según la fuente, pendiente de verificar o probablemente exclusivo del espacio), puntuación con los cinco criterios y su máximo (ejemplo: Puntuación: 55/100 (tipo de cliente 30/30, necesidad 0/30, cercanía 15/15, fecha 10/15, contacto 0/10)), fuente con enlace y siguiente paso. Si no hay ninguna verificable, escribe exactamente: Hoy no hay oportunidades verificables.",
+  "nuevas_organizaciones": "hasta 3. Para cada una: nombre, tipo, señal que lo justifica con su fuente, canal público de contacto si aparece y por qué podría ser un cliente recurrente. Si no hay ninguna, cadena vacía",
+  "senales_mercado": "hasta 2, basadas en hechos de las noticias, cada una con lo que implica para Gabriela. Si ninguna cambia lo que debería hacer, cadena vacía",
+  "accion_semana": "acción recomendada: una sola, concreta y realizable"
 }}"""
 
 
